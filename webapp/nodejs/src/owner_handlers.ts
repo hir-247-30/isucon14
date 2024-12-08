@@ -106,27 +106,46 @@ export const ownerGetChairs = async (ctx: Context<Environment>) => {
   const [chairs] = await ctx.var.dbConn.query<
     Array<ChairWithDetail & RowDataPacket>
   >(
-    `SELECT id,
-       owner_id,
-       name,
-       access_token,
-       model,
-       is_active,
-       created_at,
-       updated_at,
-       IFNULL(total_distance, 0) AS total_distance,
-       total_distance_updated_at
-FROM chairs
-       LEFT JOIN (SELECT chair_id,
-                          SUM(IFNULL(distance, 0)) AS total_distance,
-                          MAX(created_at)          AS total_distance_updated_at
-                   FROM (SELECT chair_id,
-                                created_at,
-                                ABS(latitude - LAG(latitude) OVER (PARTITION BY chair_id ORDER BY created_at)) +
-                                ABS(longitude - LAG(longitude) OVER (PARTITION BY chair_id ORDER BY created_at)) AS distance
-                         FROM chair_locations) tmp
-                   GROUP BY chair_id) distance_table ON distance_table.chair_id = chairs.id
-WHERE owner_id = ?`,
+    `-- オーナーが所有する椅子のIDを取得
+    WITH owner_chairs AS (
+      SELECT id
+      FROM chairs
+      WHERE owner_id = ?
+    ),
+
+    -- 緯度経度と椅子の距離を計算
+    distance_table AS (
+      SELECT chair_id,
+            created_at,
+            ABS(latitude - LAG(latitude) OVER (PARTITION BY chair_id ORDER BY created_at)) +
+            ABS(longitude - LAG(longitude) OVER (PARTITION BY chair_id ORDER BY created_at)) AS distance
+      FROM chair_locations
+        WHERE chair_id IN (SELECT id FROM owner_chairs)
+    ),
+
+    -- 距離を集計
+    summary_table AS (
+      SELECT chair_id,
+            SUM(IFNULL(distance, 0)) AS total_distance,
+            MAX(created_at)          AS total_distance_updated_at
+      FROM distance_table
+      GROUP BY chair_id
+    )
+
+    -- 椅子情報と距離を結合
+    SELECT chairs.id,
+          owner_id,
+          name,
+          access_token,
+          model,
+          is_active,
+          created_at,
+          updated_at,
+          total_distance,
+          total_distance_updated_at
+    FROM chairs
+          INNER JOIN owner_chairs ON chairs.id = owner_chairs.id
+          LEFT JOIN summary_table ON chairs.id = summary_table.chair_id`,
     [owner.id],
   );
 
