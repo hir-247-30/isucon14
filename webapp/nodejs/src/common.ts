@@ -53,6 +53,35 @@ export const getLatestRideStatus = async (
   return status;
 };
 
+export const getLatestRideStatusByIds = async (
+  dbConn: Connection,
+  rideIds: string[],
+): Promise<Map<string, string>> => {
+  const ride_status_map: Map<string, string> = new Map(
+    await dbConn.query<Array<Pick<RideStatus, "status"> & RowDataPacket>>(
+      `WITH latest_ride_statuses AS (
+        SELECT ride_id,
+          MAX(created_at) AS created_at
+        FROM ride_statuses
+        WHERE ride_id IN (?)
+        GROUP BY ride_id
+      )
+      SELECT ride_statuses.ride_id as ride_id,
+        ride_statuses.status as status
+      FROM ride_statuses
+      INNER JOIN latest_ride_statuses
+        ON ride_statuses.ride_id = latest_ride_statuses.ride_id
+        AND ride_statuses.created_at = latest_ride_statuses.created_at`,
+      [rideIds],
+    ).map((rideStatus: RideStatus & RowDataPacket) => [
+      rideStatus.ride_id,
+      rideStatus.status,
+    ]),
+  );
+
+  return ride_status_map;
+};
+
 export class ErroredUpstream extends Error {
   constructor(message: string) {
     super(message);

@@ -25,6 +25,7 @@ import {
   ErroredUpstream,
   FARE_PER_DISTANCE,
   getLatestRideStatus,
+  getLatestRideStatusByIds,
   INITIAL_FARE,
 } from "./common.js";
 import type { CountResult } from "./types/util.js";
@@ -165,8 +166,32 @@ export const appGetRides = async (ctx: Context<Environment>) => {
       "SELECT * FROM rides WHERE user_id = ? ORDER BY created_at DESC",
       [user.id],
     );
+
+    const rideStatusMap: Map<string, string> = await getLatestRideStatusByIds(
+      ctx.var.dbConn,
+      rides.map((ride: Ride & RowDataPacket) => ride.id),
+    );
+
+    const chairMap = new Map<string, Chair>(
+      await ctx.var.dbConn.query<Array<Chair & RowDataPacket>>(
+        "SELECT * FROM chairs WHERE id IN (?)",
+        [rides.map((ride: { chair_id: string }) => ride.chair_id)],
+      ).map((chair: Chair & RowDataPacket) => [chair.id, chair]),
+    );
+
+    const ownerMap = new Map<string, Owner>(
+      await ctx.var.dbConn.query<Array<Owner & RowDataPacket>>(
+        "SELECT * FROM owners WHERE id IN (?)",
+        [
+          Array.from(chairMap.values()).map(
+            (chair: Chair & RowDataPacket) => chair.owner_id,
+          ),
+        ],
+      ).map((owner: Owner & RowDataPacket) => [owner.id, owner]),
+    );
+
     for (const ride of rides) {
-      const status = await getLatestRideStatus(ctx.var.dbConn, ride.id);
+      const status = rideStatusMap.get(ride.id);
       if (status !== "COMPLETED") {
         continue;
       }
@@ -181,12 +206,14 @@ export const appGetRides = async (ctx: Context<Environment>) => {
         ride.destination_longitude,
       );
 
-      const [[chair]] = await ctx.var.dbConn.query<
-        Array<Chair & RowDataPacket>
-      >("SELECT * FROM chairs WHERE id = ?", [ride.chair_id]);
-      const [[owner]] = await ctx.var.dbConn.query<
-        Array<Owner & RowDataPacket>
-      >("SELECT * FROM owners WHERE id = ?", [chair.owner_id]);
+      const chair: Chair & RowDataPacket | undefined = chairMap.get(ride.chair_id);
+      const owner: Owner & RowDataPacket | undefined = ownerMap.get(
+        chair.owner_id,
+      );
+      if (!chair || !owner) {
+        continue;
+      }
+
       const item = {
         id: ride.id,
         pickup_coordinate: {
@@ -242,8 +269,12 @@ export const appPostRides = async (ctx: Context<Environment>) => {
       [user.id],
     );
     let continuingRideCount = 0;
+    const rideStatusMap: Map<string, string> = await getLatestRideStatusByIds(
+      ctx.var.dbConn,
+      rides.map((ride: Ride & RowDataPacket) => ride.id),
+    );
     for (const ride of rides) {
-      const status = await getLatestRideStatus(ctx.var.dbConn, ride.id);
+      const status = rideStatusMap.get(ride.id);
       if (status !== "COMPLETED") {
         continuingRideCount++;
       }
@@ -665,6 +696,7 @@ export const appGetNearbyChairs = async (ctx: Context<Environment>) => {
       model: string;
       current_coordinate: Coordinate;
     }> = [];
+
     for (const chair of chairs) {
       if (!chair.is_active) continue;
       const [rides] = await ctx.var.dbConn.query<Array<Ride & RowDataPacket>>(
@@ -672,9 +704,13 @@ export const appGetNearbyChairs = async (ctx: Context<Environment>) => {
         [chair.id],
       );
       let skip = false;
+      const rideStatusMap = await getLatestRideStatusByIds(
+        ctx.var.dbConn,
+        rides.map((ride: Ride & RowDataPacket) => ride.id),
+      );
       for (const ride of rides) {
         // 過去にライドが存在し、かつ、それが完了していない場合はスキップ
-        const status = await getLatestRideStatus(ctx.var.dbConn, ride.id);
+        const status = rideStatusMap.get(ride.id);
         if (status !== "COMPLETED") {
           skip = true;
           break;
