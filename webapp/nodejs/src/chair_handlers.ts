@@ -72,7 +72,7 @@ export const chairPostCoordinate = async (ctx: Context<Environment>) => {
     );
     const [[location]] = await ctx.var.dbConn.query<
       Array<ChairLocation & RowDataPacket>
-    >("SELECT * FROM chair_locations WHERE id = ?", [chairLocationID]);
+    >("SELECT created_at FROM chair_locations WHERE id = ?", [chairLocationID]);
     const [[ride]] = await ctx.var.dbConn.query<Array<Ride & RowDataPacket>>(
       "SELECT * FROM rides WHERE chair_id = ? ORDER BY updated_at DESC LIMIT 1",
       [chair.id],
@@ -114,7 +114,7 @@ export const chairGetNotification = async (ctx: Context<Environment>) => {
   const chair = ctx.var.chair;
 
     const [[ride]] = await ctx.var.dbConn.query<Array<Ride & RowDataPacket>>(
-      "SELECT * FROM rides WHERE chair_id = ? ORDER BY updated_at DESC LIMIT 1",
+      "SELECT id, user_id, pickup_latitude, pickup_longitude, destination_latitude, destination_longitude FROM rides WHERE chair_id = ? ORDER BY updated_at DESC LIMIT 1",
       [chair.id],
     );
     if (!ride) {
@@ -124,7 +124,7 @@ export const chairGetNotification = async (ctx: Context<Environment>) => {
     const [[yetSentRideStatus]] = await ctx.var.dbConn.query<
       Array<RideStatus & RowDataPacket>
     >(
-      "SELECT * FROM ride_statuses WHERE ride_id = ? AND chair_sent_at IS NULL ORDER BY created_at ASC LIMIT 1",
+      "SELECT id, status FROM ride_statuses WHERE ride_id = ? AND chair_sent_at IS NULL ORDER BY created_at ASC LIMIT 1",
       [ride.id],
     );
 
@@ -134,7 +134,7 @@ export const chairGetNotification = async (ctx: Context<Environment>) => {
       : await getLatestRideStatus(ctx.var.dbConn, ride.id);
 
     const [[user]] = await ctx.var.dbConn.query<Array<User & RowDataPacket>>(
-      "SELECT * FROM users WHERE id = ? FOR SHARE",
+      "SELECT id, firstname, last_name FROM users WHERE id = ? FOR SHARE",
       [ride.user_id],
     );
 
