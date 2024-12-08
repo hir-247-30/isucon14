@@ -1,3 +1,6 @@
+.viminfo
+.wget-hsts
+
 .ansible/
 .bash_history
 .bash_logout
