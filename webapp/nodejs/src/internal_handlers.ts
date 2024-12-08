@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import type { Environment } from "./types/hono.js";
 import type { RowDataPacket, Connection } from "mysql2/promise";
 import type { Chair, ChairLocation, ChairModel, Ride } from "./types/models.js";
+import { calculateDistance } from "./common.js";
 
 // このAPIをインスタンス内から一定間隔で叩かせることで、椅子とライドをマッチングさせる
 export const internalGetMatching = async (ctx: Context<Environment>) => {
@@ -62,22 +63,32 @@ export const internalGetMatching = async (ctx: Context<Environment>) => {
       }
 
       // 乗車位置までの移動時間
-      const pickup_distance = calculateDistance(ride.pickup_latitude, ride.pickup_longitude, chair_location.latitude, chair_location.longitude);
+      const pickup_distance = calculateDistance(
+        ride.pickup_latitude,
+        ride.pickup_longitude,
+        chair_location.latitude,
+        chair_location.longitude,
+      );
       const pickup_time = pickup_distance / chair_speed;
 
       // 目的地までの移動時間
-      const destination_distance = calculateDistance(chair_location.latitude, chair_location.longitude, ride.destination_latitude, ride.destination_longitude);
+      const destination_distance = calculateDistance(
+        ride.pickup_latitude,
+        ride.pickup_longitude,
+        ride.destination_latitude,
+        ride.destination_longitude,
+      );
       const destination_time = destination_distance / chair_speed;
 
       // 合計時間
       const total_time = pickup_time + destination_time;
 
       // 待ち時間を秒数単位に変換
-      // const waiting_seconds = (new Date().getTime() - ride.created_at.getTime()) / 1000;
+      const waiting_seconds = (new Date().getTime() - ride.created_at.getTime()) / 1000;
 
       // スコアの計算: 移動時間に0.7、待ち時間に0.3の重みを付ける
-      // const score = (0.7 * total_time) + (0.3 * waiting_seconds);
-      const score = total_time;
+      const score = (0.7 * total_time) + (0.3 * waiting_seconds);
+
       scoring_rides.push({
         ride_id: ride.id,
         chair_id: chair.id,
@@ -138,8 +149,3 @@ async function getChairsLatestLocationsByChairIds(dbConn: Connection, chair_ids:
   );
   return locations;
 };
-
-function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
-  // マンハッタン距離を計算
-  return Math.abs(lat1 - lat2) + Math.abs(lng1 - lng2);
-}
