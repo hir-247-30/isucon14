@@ -6,9 +6,8 @@ import type { Chair, ChairLocation, ChairModel, Ride } from "./types/models.js";
 // このAPIをインスタンス内から一定間隔で叩かせることで、椅子とライドをマッチングさせる
 export const internalGetMatching = async (ctx: Context<Environment>) => {
   // 配車できていないrideを取得
-  // 一気にやるよりも、件数絞って着実にマッチングさせる
   const unmatched_ride_ids = await ctx.var.dbConn.query<Array<Ride & RowDataPacket>>(
-    "SELECT id FROM rides WHERE chair_id IS NULL ORDER BY created_at LIMIT 25",
+    "SELECT id FROM rides WHERE chair_id IS NULL ORDER BY created_at",
   );
   if (!unmatched_ride_ids.length) {
     return ctx.body(null, 204);
@@ -74,11 +73,11 @@ export const internalGetMatching = async (ctx: Context<Environment>) => {
       const total_time = pickup_time + destination_time;
 
       // 待ち時間を秒数単位に変換
-      const waiting_seconds = (new Date().getTime() - ride.created_at.getTime()) / 1000;
+      // const waiting_seconds = (new Date().getTime() - ride.created_at.getTime()) / 1000;
 
       // スコアの計算: 移動時間に0.7、待ち時間に0.3の重みを付ける
-      const score = (0.7 * total_time) + (0.3 * waiting_seconds);
-
+      // const score = (0.7 * total_time) + (0.3 * waiting_seconds);
+      const score = total_time;
       scoring_rides.push({
         ride_id: ride.id,
         chair_id: chair.id,
@@ -113,8 +112,8 @@ export const internalGetMatching = async (ctx: Context<Environment>) => {
 
   // rideを更新するbulk update文を作成
   const update_rides_query = matched_rides.map((matched_ride) => {
-    return `UPDATE rides SET chair_id = '${matched_ride.chair_id}' WHERE id = '${matched_ride.ride_id}';`;
-  }).join(" ");
+    return `UPDATE rides SET chair_id = '${matched_ride.chair_id}' WHERE id = '${matched_ride.ride_id}'`;
+  }).join(";");
 
   await ctx.var.dbConn.query(update_rides_query);
 
