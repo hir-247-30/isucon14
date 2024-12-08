@@ -159,7 +159,6 @@ type GetAppRidesResponseItem = {
 
 export const appGetRides = async (ctx: Context<Environment>) => {
   const user = ctx.var.user;
-  await ctx.var.dbConn.beginTransaction();
   const items: GetAppRidesResponseItem[] = [];
   try {
     const [rides] = await ctx.var.dbConn.query<Array<Ride & RowDataPacket>>(
@@ -211,7 +210,6 @@ export const appGetRides = async (ctx: Context<Environment>) => {
       };
       items.push(item);
     }
-    await ctx.var.dbConn.commit();
     return ctx.json(
       {
         rides: items,
@@ -355,7 +353,6 @@ export const appPostRidesEstimatedFare = async (ctx: Context<Environment>) => {
     );
   }
   const user = ctx.var.user;
-  await ctx.var.dbConn.beginTransaction();
   try {
     const discounted = await calculateDiscountedFare(
       ctx.var.dbConn,
@@ -366,7 +363,6 @@ export const appPostRidesEstimatedFare = async (ctx: Context<Environment>) => {
       reqJson.destination_coordinate.latitude,
       reqJson.destination_coordinate.longitude,
     );
-    await ctx.var.dbConn.commit();
     return ctx.json(
       {
         fare: discounted,
@@ -659,7 +655,6 @@ export const appGetNearbyChairs = async (ctx: Context<Environment>) => {
 
   const coordinate: Coordinate = { latitude: lat, longitude: lon };
 
-  await ctx.var.dbConn.beginTransaction();
   try {
     const [chairs] = await ctx.var.dbConn.query<Array<Chair & RowDataPacket>>(
       "SELECT * FROM chairs",
@@ -725,7 +720,6 @@ export const appGetNearbyChairs = async (ctx: Context<Environment>) => {
       await ctx.var.dbConn.query<
         Array<{ "CURRENT_TIMESTAMP(6)": Date } & RowDataPacket>
       >("SELECT CURRENT_TIMESTAMP(6)");
-    await ctx.var.dbConn.commit();
     return ctx.json(
       {
         chairs: nearbyChairs,
