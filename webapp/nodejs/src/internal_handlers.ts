@@ -17,7 +17,7 @@ export const internalGetMatching = async (ctx: Context<Environment>) => {
   // 配車できていないrideのデータを取得
   const unmatched_rides = await ctx.var.dbConn.query<Array<Ride & RowDataPacket>>(
     "SELECT id, user_id, pickup_latitude, pickup_longitude, destination_latitude, destination_longitude FROM rides WHERE id IN (?)",
-    [unmatched_ride_ids.map((ride: Ride) => ride.id)],
+    [unmatched_ride_ids.map((ride: Ride & RowDataPacket) => ride.id)],
   );
 
   // 配車可能な椅子を取得
@@ -29,8 +29,8 @@ export const internalGetMatching = async (ctx: Context<Environment>) => {
   const chair_locations_map = new Map<string, { latitude: number, longitude: number }>(
     (await getChairsLatestLocationsByChairIds(
       ctx.var.dbConn,
-      available_chairs.map((chair: { id: string }) => chair.id),
-    )).map((location: ChairLocation) => [
+      available_chairs.map((chair: { id: string } & RowDataPacket) => chair.id),
+    )).map((location: ChairLocation & RowDataPacket) => [
       location.chair_id,
       { latitude: location.latitude, longitude: location.longitude },
     ]),
@@ -41,7 +41,7 @@ export const internalGetMatching = async (ctx: Context<Environment>) => {
     (await ctx.var.dbConn.query<Array<ChairModel & RowDataPacket>>(
       "SELECT name, speed FROM chair_models WHERE name IN (?)",
       [available_chairs.map((chair: { model: string }) => chair.model)],
-    )).map((chair_model: ChairModel) => [chair_model.name, chair_model.speed])
+    )).map((chair_model: ChairModel & RowDataPacket) => [chair_model.name, chair_model.speed])
   );
 
   /**
@@ -131,7 +131,10 @@ export const internalGetMatching = async (ctx: Context<Environment>) => {
   return ctx.body(null, 204);
 };
 
-async function getChairsLatestLocationsByChairIds(dbConn: Connection, chair_ids: string[]) {
+async function getChairsLatestLocationsByChairIds(
+  dbConn: Connection,
+  chair_ids: string[],
+): Promise<Array<ChairLocation & RowDataPacket>> {
   const [locations] = await dbConn.query<Array<ChairLocation & RowDataPacket>>(
     `SELECT cl.chair_id,
       cl.latitude,
