@@ -498,8 +498,6 @@ type AppGetNotificationResponse = {
 export const appGetNotification = async (ctx: Context<Environment>) => {
   let response: AppGetNotificationResponse;
   const user = ctx.var.user;
-  ctx.var.dbConn.beginTransaction();
-  try {
     const [[ride]] = await ctx.var.dbConn.query<Array<Ride & RowDataPacket>>(
       "SELECT * FROM rides WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
       [user.id],
@@ -513,6 +511,7 @@ export const appGetNotification = async (ctx: Context<Environment>) => {
       "SELECT * FROM ride_statuses WHERE ride_id = ? AND app_sent_at IS NULL ORDER BY created_at ASC LIMIT 1",
       [ride.id],
     );
+  try {
     const status = yetSentRideStatus
       ? yetSentRideStatus.status
       : await getLatestRideStatus(ctx.var.dbConn, ride.id);
@@ -562,16 +561,19 @@ export const appGetNotification = async (ctx: Context<Environment>) => {
     }
 
     if (yetSentRideStatus?.id) {
+      ctx.var.dbConn.beginTransaction();
       await ctx.var.dbConn.query(
         "UPDATE ride_statuses SET app_sent_at = CURRENT_TIMESTAMP(6) WHERE id = ?",
         [yetSentRideStatus.id],
       );
+      await ctx.var.dbConn.commit();
     }
 
-    await ctx.var.dbConn.commit();
     return ctx.json(response, 200);
   } catch (e) {
-    await ctx.var.dbConn.rollback();
+    if (yetSentRideStatus?.id) {
+      await ctx.var.dbConn.rollback();
+    }
     return ctx.text(`${e}`, 500);
   }
 };
