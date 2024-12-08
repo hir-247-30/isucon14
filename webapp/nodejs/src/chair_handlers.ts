@@ -113,6 +113,8 @@ export const chairPostCoordinate = async (ctx: Context<Environment>) => {
 export const chairGetNotification = async (ctx: Context<Environment>) => {
   const chair = ctx.var.chair;
 
+  try {
+    await ctx.var.dbConn.beginTransaction();
     const [[ride]] = await ctx.var.dbConn.query<Array<Ride & RowDataPacket>>(
       "SELECT * FROM rides WHERE chair_id = ? ORDER BY updated_at DESC LIMIT 1",
       [chair.id],
@@ -128,7 +130,6 @@ export const chairGetNotification = async (ctx: Context<Environment>) => {
       [ride.id],
     );
 
-  try {
     const status = yetSentRideStatus
       ? yetSentRideStatus.status
       : await getLatestRideStatus(ctx.var.dbConn, ride.id);
@@ -139,7 +140,6 @@ export const chairGetNotification = async (ctx: Context<Environment>) => {
     );
 
     if (yetSentRideStatus?.id) {
-      await ctx.var.dbConn.beginTransaction();
       await ctx.var.dbConn.query(
         "UPDATE ride_statuses SET chair_sent_at = CURRENT_TIMESTAMP(6) WHERE id = ?",
         [yetSentRideStatus.id],
@@ -169,9 +169,7 @@ export const chairGetNotification = async (ctx: Context<Environment>) => {
       200,
     );
   } catch (e) {
-    if (yetSentRideStatus?.id) {
-      await ctx.var.dbConn.rollback();
-    }
+    await ctx.var.dbConn.rollback();
     return ctx.text(`${e}`, 500);
   }
 };
